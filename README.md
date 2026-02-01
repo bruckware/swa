@@ -5,23 +5,16 @@
 ## Windows (Batch-Script)
 
 In Windows, ensure dependencies are installed and simply place `swa.cmd` in PATH to use it. (recommended location: `%USERPROFILE%\AppData\Local\bin`).
-
 ```batch
 mkdir %USERPROFILE%\AppData\Local\bin
-git clone https://github.com/bruckware/swa.git
 copy swa\swa.cmd "%USERPROFILE%\AppData\Local\bin\"
-:: Add "%USERPROFILE%\AppData\Local\bin" to the PATH and restart running shell
-swa --version
+:: Add `%USERPROFILE%\AppData\Local\bin` to the PATH and restart running shell
 ```
-
 
 ## Linux (Bash-Script)
 After ensuring about dependencies and copying `swa.sh` to your filesystem (recommended location: `~/.local/bin`), define a shell function that invokes `swa.sh` using `eval`. This causes the script to run in a child process, and upon completion, only the required AWS environment variables are exported into the current shell session.
 
 ```bash
-mkdir -p ~/.local/bin
-git clone https://github.com/bruckware/swa.git
-cp swa/swa.sh ~/.local/bin/swa.sh
 chmod +x ~/.local/bin/swa.sh
 
 cat >> ~/.bashrc <<'EOF'
@@ -42,7 +35,7 @@ swa --version
   - [gum](https://github.com/charmbracelet/gum) → gum (Charmbracelet) for select prompts.
   - [curl](https://curl.se/docs/releases.html) → included in Windows 10 (build ≥ 17063). If `curl` does not exist at  `%SystemRoot%\System32\curl.exe`, install it via Chocolatey or Scoop package manager and update `CURL_EXE` variable in `swa.cmd`.
 #### Optional
-   - [mc](https://github.com/minio/mc) → to use -i option of MinIO client
+   - [mc](https://github.com/minio/mc) → if you need to use `-i` option of MinIO client
 
 
 

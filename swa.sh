@@ -364,8 +364,8 @@ get_services_list() {
 #      2. Service identifier key
 #      3. AWS_ENDPOINT_URL_<SERVICE> environment variable
 #
-#  - Filtering HTML page for values with this tag → " <code class="code">accessanalyzer</code>"
-#  - Only 'Service identifier key' in the 2nd row is extracted → accessanalyzer
+#  - Filtering HTML page for lines with this tag → " <code class="code">accessanalyzer</code>"
+#  - For each group of 3 rows, extract 'Service identifier key' in the 2nd row → accessanalyzer
 #
 # Note:
 #   Not all three values from the AWS services table are required.
@@ -2123,7 +2123,7 @@ download_ca_bundle() {
     fi
 
 
-    if aws configure set profile."$AWS_PROFILE".ca_bundle "$SWA_CA" 2>&1; then
+    if aws configure set profile."$AWS_PROFILE".ca_bundle "$SWA_CA"; then
         print_msg "${MSG_PREFIX} INFO: Successfully added new ca_bundle path to config file."
     else
         print_msg "${MSG_PREFIX} ERROR (60): failed to update AWS config with new ca_bundle path."

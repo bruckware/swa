@@ -355,7 +355,7 @@ if "%FLAG_CACHE%"=="1" (
 if not exist "%SERVICES_CACHE%" (
    call :download_services_list || exit /b 1
    exit /b 0
-) 
+)
 
 for /f "usebackq tokens=*" %%s in ("%SERVICES_CACHE%") do set "aws_services_list=%%s"
 
@@ -377,8 +377,8 @@ goto :eof
 ::      2. Service identifier key
 ::      3. AWS_ENDPOINT_URL_<SERVICE> environment variable
 ::
-::  - Filtering HTML page for values with this tag → " <code class="code">accessanalyzer</code>"
-::  - Only 'Service identifier key' in the 2nd row is extracted → accessanalyzer
+::  - Filtering HTML page for lines starting with this tag → " <code class="
+::  - For each group of 3 rows, extract 'Service identifier key' in the 2nd row 
 ::
 :: Note:
 ::   Not all three values from the AWS services table are required.
@@ -389,13 +389,13 @@ goto :eof
 ::       (service identifier is converted to uppercase and appended to
 ::        AWS_ENDPOINT_URL_<UPPERCASE_SERVICE_ID>)
 :download_services_list
-set "AWS_SS_URL=https://docs.aws.amazon.com/sdkref/latest/guide/ss-endpoints-table.html"
-
 set "AWS_SS_TABLE=%SWA_DIR%\aws_ss_table.html"
 copy nul "%AWS_SS_TABLE%" >nul 2>&1 || (
     call :error_67
     exit /b 1
 )
+
+set "AWS_SS_URL=https://docs.aws.amazon.com/sdkref/latest/guide/ss-endpoints-table.html"
 
 :: Intentionally extracting service_ids from HTML page in two steps (instead of piping) for better error handling
 "%CURL_EXE%" -q -s "%AWS_SS_URL%" > "%AWS_SS_TABLE%" || ( call :error_14 & exit /b 1 )
@@ -469,7 +469,7 @@ copy nul "%SERVICES_CACHE%" >nul 2>&1 || (
     exit /b 1
 )
 
-:: Redirecting service list with set to avoid newline
+:: Redirecting services list with set to avoid newline
 set "aws_services_list=%aws_services_list:~1%"
 <nul set /p="%aws_services_list%" > "%SERVICES_CACHE%"
 
@@ -693,15 +693,15 @@ goto :eof
 :: Trimmed lines are used when parsing the config file to safely rely on inexpensive string substitution instead of more costly for-loops or external tools.
 :: Therefore, we must ensure the character order and encoding are exactly as expected to prevent incorrect results.
 
-:: validation step-1 using regex: exceptionally allowing colon here (line number delimiter). caret could not be detected. checking both in step2
-:: temporarily disabling DelayedExpansion to detect and print the exclamation character if any
+:: validation step-1 using regex: exceptionally allowing colon here (line number delimiter). checking colon in step2.
+:: temporarily disabling DelayedExpansion to detect and print the exclamation character if any.
 :validate_header_step1
 setlocal DisableDelayedExpansion
 
 set "header_chars="
 set "invalid_char="
 for /f "usebackq delims=" %%L in (`
-    call "%FINDSTR_EXE%" /N /C:"[" "%target_file%" ^| call "%FINDSTR_EXE%" /R /C:"[^A-Za-z0-9 ._\-\[\\\]:]"
+    call "%FINDSTR_EXE%" /N /C:"[" "%target_file%" ^| "%FINDSTR_EXE%" /R /C:"[^A-Za-z0-9 ._\-\[\\\]:]"
 `) do (
     set header_chars=%%L
     if defined header_chars (
@@ -745,13 +745,7 @@ for /L %%i in (0,1,65) do (
             exit /b 1
         )
         
-        :: checking caret and colon that were not checked in regex step
-        if "!ch!"=="^" ( 
-            set "header_chars=!line_nr! !line:~0,-1!"
-            call :error_22
-            call :info_3
-            exit /b 1 
-        )
+        :: checking colon that was not checked in regex step
         if "!ch!"==":" ( 
             set "header_chars=!line_nr! !line:~0,-1!"
             call :error_22
@@ -810,9 +804,7 @@ for /f "skip=%profile_line_nr% usebackq tokens=* delims=" %%s in ("%CONF_FILE%")
 
     :srv_stats
     for %%S in (%aws_services_list%) do (
-        for /f %%C in ("!%%S_count!") do ( 
-            if %%C gtr 0 set "profile_services=!profile_services! %%S:%%C"
-        )
+        if !%%S_count! gtr 0 set "profile_services=!profile_services! %%S:!%%S_count!"
     )
 
 goto :eof
@@ -1155,6 +1147,7 @@ for /f "%skip_op% usebackq tokens=1* delims=:" %%L in (`call "%FINDSTR_EXE%" /N 
         set "SWA_LNR_!section_name!=!line_nr!"
   
     ) else if "!line:~0,9!"=="[services" (
+        
         set "service_seen=0"
         set "scope=Service"
         set "section_name=!line:~9,-1!"
@@ -1228,7 +1221,7 @@ goto :eof
 
 :: Verify values extracted for IAM User profile
 :: If s3 endpoint_url is required (-i -3 -5 options) but not explicitly defined in config file,
-:: below subroutines are called to define s3 endpoint_url.
+:: set_caller_identity and set_aws_s3_url subroutines are called to define s3 endpoint_url.
 :verify_iam_config
 if not defined AWS_ENDPOINT_URL (
     if not defined AWS_ENDPOINT_URL_S3 (
@@ -1570,8 +1563,6 @@ for /f "skip=%profile_line_nr% usebackq tokens=1* delims==" %%A in ("%CONF_FILE%
         call :error_71 & exit /b 1
     )
 
-    
-
     if "!assumerole_crd_pt!"=="sso" (
         call :info_25
         call :sso_login "!assumerole_crd_pn!" || exit /b 1
@@ -1618,7 +1609,6 @@ if defined SWA_ACCESS_KEY if defined SWA_SECRET_KEY if defined SWA_SESSION_TOKEN
     exit /b 0
 )
 if defined SWA_ACCESS_KEY if defined SWA_SECRET_KEY ( 
-    set "line="
     gum.exe confirm "%MSG_PREFIX% AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY exist in environment. Use them?" || exit /b 1
     set "AWS_ACCESS_KEY_ID=!SWA_ACCESS_KEY!"
     set "AWS_SECRET_ACCESS_KEY=!SWA_SECRET_KEY!"
@@ -1732,7 +1722,7 @@ if "!HTTP!"=="0" (
        set "CURL_QUERY="%CURL_EXE%" %CURL_OPTS% --ssl-revoke-best-effort -w %%{http_code} --cacert "!SWA_CA!" "!SWA_TARGET_S3URL!""
     ) else (
        set "CURL_QUERY="%CURL_EXE%" %CURL_OPTS% --ssl-revoke-best-effort -w %%{http_code} "!SWA_TARGET_S3URL!""
-    )        
+    )
 ) else (
     set "CURL_QUERY="%CURL_EXE%" %CURL_OPTS% -w %%{http_code} "http://!HOST_BASE!""
 )
@@ -1988,7 +1978,6 @@ if "%profile_type%"=="iam" (
     
     if defined assumerole_crd_pn (
        call :export_credentials "!assumerole_crd_pn!" || ( call :error_74 & exit /b 1 )
-
     )
     
     call :get_region
