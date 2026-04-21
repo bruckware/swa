@@ -4,7 +4,7 @@
 
 ## Windows (Batch-Script)
 
-In Windows, ensure dependencies are installed and simply place `swa.cmd` in PATH to use it. (recommended location: `%USERPROFILE%\AppData\Local\bin`).
+In Windows, ensure dependencies are installed and simply place `swa.cmd` in PATH to use it.
 ```batch
 mkdir %USERPROFILE%\AppData\Local\bin
 copy swa\swa.cmd "%USERPROFILE%\AppData\Local\bin\"
@@ -12,7 +12,7 @@ copy swa\swa.cmd "%USERPROFILE%\AppData\Local\bin\"
 ```
 
 ## Linux (Bash-Script)
-After ensuring about dependencies and copying `swa.sh` to your filesystem (recommended location: `~/.local/bin`), define a shell function that invokes `swa.sh` using `eval`. This causes the script to run in a child process, and upon completion, only the required AWS environment variables are exported into the current shell session.
+After ensuring about dependencies and copying `swa.sh` to the filesystem, define a shell function that invokes `swa.sh` using `eval` to export AWS variables on running shell session (`export` commands are printed on stdout).
 
 ```bash
 chmod +x ~/.local/bin/swa.sh
@@ -52,7 +52,7 @@ swa --version
 
   - Permission to create or update config files for of `s3cmd` and `mc (MinIO)` in their default locations.
 
-  - Once you are certain that all requirements are already in place, you can comment out some of the checks in the requirements step. This avoids rechecking them every time you run `swa` on the same system and helps speed up the script startup (for example, config and credentials file checks or tool availability checks).
+- Once you are certain that all requirements are already in place, you can comment out some of the checks in the requirements step. This avoids rechecking them every time you run `swa` on the same system and helps speed up the script startup (for example, config and credentials file checks or tool availability checks).
 
 #### Windows specific
 - `EnableExtensions` is enabled by default on Windows (since NT 4.0).

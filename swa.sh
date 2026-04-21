@@ -1,31 +1,28 @@
 #!/usr/bin/env bash
-#
-#      script: swa.sh
-#     purpose: AWS context switcher for Linux Bash
-#     version: 1.0.0
-#     license: MIT
-#      author: Hamed Davodi <retrogaming457 [at] gmail [dot] com>
-#  repository: https://github.com/bruckware/swa
-#
+##
+##      script: swa.sh
+##     purpose: AWS context switcher for Linux Bash shell
+##     version: 1.1.0
+##     license: MIT
+##      author: Hamed Davodi <retrogaming457 [at] gmail [dot] com>
+##  repository: https://github.com/bruckware/swa
+##
 
 
 show_help() {
 
   print_msg "
-  swa - an interactive AWS context switcher for Linux Bash shell.
+  Interactive AWS context switcher for Linux Bash shell.
 
-  This tool uses environment variables to switch profile and avoids editing of config
-  file for this purpose.
-
-  swa exports variables of the global settings & service-specific settings, including
-  all 380 AWS services. Note environment variables are only exported in current shell
-  session and, this tool does not modify system-wide or user-wide variables table.
+  swa uses environment variables to switch profile, exporting variables of the global 
+  settings and service-specific settings, including all 380 AWS services. Environment 
+  variables are only exported in the current shell session & System-wide or user-wide 
+  variables table are not modified.
 
   swa is optimized to work with large config files, containing numerous profiles from 
   all AWS profile types (IAM User, SSO, Assume Role, Web Identity, External Process).
   it can parse values of profiles with services header as those values cannot be read
-  by aws cli itself and,supports Amazon s3 and any s3-compatible implementation which
-  is using AWS s3 API.
+  by aws cli itself.
 
   In addition, it faciliates working with self-hosted s3 services in case s3 endpoint
   is using self-signed certificate and, it exports the config file of other s3 client
@@ -42,7 +39,7 @@ show_help() {
        -u              Verify endpoint_url access and download CA bundle if required
        -i              Update MinIO client (mc) config file for s3 alias
        -3              Update config file of s3cmd
-       -5              Export S3 endpoint_url environment variable for s5cmd
+       -5              Export S3_ENDPOINT_URL for s5cmd
 "
 
 }
@@ -286,8 +283,7 @@ get_config_ts() {
 #   - Timestamp stored in profiles cache matches current timestamp of config file
 # otherwise or if -f option is used, exits with code 1 to build the cache
 #
-# Note that if swa is invoked with -f option, if profile cache and services list exist,
-# they are overwritten and a new cache is built.
+# Note that if swa is invoked with -f option, if profile cache and services list exist, they are overwritten and a new cache is built.
 verify_cache() {
 
   [[ "${FLAG_CACHE}" -eq 1 ]] && return 1
@@ -372,21 +368,16 @@ get_services_list() {
 #   Service identifier key alone is sufficient for all current use cases:
 #     - Validating service identifiers in config file
 #     - Displaying options in the user selection menu
-#     - Defining service-specific endpoint URLs
-#       (service identifier is converted to uppercase and appended to
-#        AWS_ENDPOINT_URL_<UPPERCASE_SERVICE_ID>)
+#     - Defining service-specific endpoint URLs (service identifier is converted to uppercase and appended to AWS_ENDPOINT_URL_<UPPERCASE_SERVICE_ID>)
 download_services_list() {
 
     local AWS_SS_URL="https://docs.aws.amazon.com/sdkref/latest/guide/ss-endpoints-table.html"
-    local html
-
-    html=$(curl -q -s "$AWS_SS_URL") || {
+    local html=$(curl -q -s "$AWS_SS_URL") || {
         print_msg "${MSG_PREFIX} ERROR (11): failed to connect to ${YELLOW}${AWS_SS_URL}${RESET} to download service list."
         return 1
     }
 
-    local line
-    local count=0
+    local line count=0
     while IFS= read -r line; do
         
         [[ $line =~ ^[[:space:]]+\<code\ class=\"code\"\>([^<]+)\<\/code\> ]] || continue
@@ -429,9 +420,9 @@ verify_services_list(){
     fi
 
     local random_services=(s3 cloud9 dynamodb ec2 eks lambda sagemaker)
-    local svc srv
+    local svc srv found
     for svc in "${random_services[@]}"; do
-        local found=0
+        found=0
         for srv in "${aws_services_list[@]}"; do
             if [[ "$svc" == "$srv" ]]; then
                 found=1
@@ -456,8 +447,7 @@ verify_services_list(){
 # Workflow:
 #  - Create services cache file as a zero-byte file.
 #  - Write the full services list from indexed array and write into service cache file.
-#  - A minimum file-size check is performed to validate that the write
-#    operation completed successfully.
+#  - A minimum file-size check is performed to validate that the write operation completed successfully.
 cache_services_list() {
 
     :> "${SERVICES_CACHE}" || {
@@ -465,12 +455,7 @@ cache_services_list() {
         return 1
     }
 
-    {
-        for svc in "${aws_services_list[@]}"; do
-            printf '%s\n' "$svc"
-        done
-    
-    } > "${SERVICES_CACHE}" || {
+    printf '%s\n' "${aws_services_list[@]}" > "${SERVICES_CACHE}" || {
         print_msg "${MSG_PREFIX} ERROR (16): failed writing to service cache file at ${YELLOW}${SERVICES_CACHE}${RESET}"
         return 1
     }
@@ -490,9 +475,6 @@ cache_services_list() {
 
 
 
-
-
-
 # Profile data from the config file is validated, collected, and cached.
 #
 # Workflow:
@@ -500,9 +482,7 @@ cache_services_list() {
 #     all available profiles into the profile_list_cred variable
 #     (see comments above get_credentials_profiles for details).
 #
-#   - Validate config file headers to ensure only the allowed character set
-#     is used (step 1: regex-based validation).
-#
+#   - Validate config file headers to ensure only the allowed character set is used (step 1: regex-based validation).
 #   - Parse the config file and identify one of the supported header types:
 #       * [default]
 #       * [profile ...]
@@ -510,9 +490,7 @@ cache_services_list() {
 #       * [sso-session ...]
 #     Anything else → hard error.
 #
-#   - For all supported header types, perform the second step of character
-#     set validation.
-#
+#   - For all supported header types, perform the second step of character set validation.
 #   - For profile headers:
 #       * Determine the profile type → set_profile_type function
 #       * Collect any indented services and their count → get_profile_services function
@@ -557,7 +535,7 @@ get_config_profiles() {
                 continue
                 ;;
 
-            "[profile "*)
+            "[profile"*)
 
                 [[ "${line:8:1}" == " " ]] || {
                     print_msg "${MSG_PREFIX} ERROR (21): one space required between header prefix and its name at line $line_nr of config file. e.g. [profile devops]"
@@ -575,7 +553,7 @@ get_config_profiles() {
                 continue
                 ;;
 
-            "[services "*)
+            "[services"*)
                 [[ "${line:9:1}" == " " ]] || {
                     print_msg "${MSG_PREFIX} ERROR (22): one space required between header prefix and its name at line $line_nr of config file. e.g. [services devops]"
                     return 1
@@ -585,7 +563,7 @@ get_config_profiles() {
                 continue
                 ;;
 
-            "[sso-session "*)
+            "[sso-session"*)
                  [[ "${line:12:1}" == " " ]] || {
                     print_msg "${MSG_PREFIX} ERROR (23): one space required between header prefix and its name at line $line_nr of config file. e.g. [sso-session devops]"
                     return 1
@@ -623,8 +601,7 @@ get_credentials_profiles() {
     local header_source="credentials file"
     validate_header_step1 "${CRED_FILE}" || return 1
 
-    local line_nr line header_line
-    local profile_name
+    local line_nr line header_line profile_name
     declare -A dup_cred
     declare -a list=()
 
@@ -669,10 +646,8 @@ get_credentials_profiles() {
 validate_header_step1() {
 
     local target_file="$1"
-    local line_nr=0
-    local invalid_found=0
-    local line
-
+    local line line_nr=0 invalid_found=0
+    
     while IFS= read -r line; do
         (( ++line_nr ))
 
@@ -692,9 +667,8 @@ validate_header_step1() {
 # Validation step-2: checking length and other invalid characters
 validate_header_step2() {
 
-    local header="$line"
-    local name
-
+    local name header="$line"
+    
     # checking if closing bracket exists at all
     if [[ "$header" != *"]"* ]]; then
         print_msg "${MSG_PREFIX} ERROR (24): invalid header in ${header_source} at line $line_nr → $header_line"
@@ -751,9 +725,8 @@ validate_header_step2() {
 #  - ext : External credential process
 set_profile_type() {
     
-    local ptype=""
-    local prn
-
+    local prn ptype=""
+    
     for prn in "${profile_list_cred[@]:-}"; do
         if [[ "$profile_name" == "$prn" ]]; then
             profile_type="iam"
@@ -769,7 +742,7 @@ set_profile_type() {
         
         (( ++line_nr < start_line )) && continue
         
-        key=$(trim "$key")
+        key="${key// /}"
         [[ "$key" == \[* ]] && break
 
         case "$key" in
@@ -808,8 +781,7 @@ set_profile_type() {
 # resulting profile_services variable is appended to profile_data array to be cached later.
 get_profile_services() {
 
-    local key rest
-    local line_nr=0
+    local key rest line_nr=0
     local start_line=$((profile_line_nr + 1))
 
     declare -A svc_count=()
@@ -819,7 +791,7 @@ get_profile_services() {
         
         (( ++line_nr < start_line )) && continue
 
-        key=$(trim "$key")
+        key="${key// /}"
         [[ -z $key ]] && continue
 
         case $key in
@@ -893,12 +865,7 @@ cache_profiles_data() {
     get_config_ts || return 1
     printf '[%s]\n' "$current_timestamp" > "${PROFILES_CACHE}"
 
-    local record
-    for record in "${profile_data[@]}"; do
-        printf '%s\n' "$record" >> "${PROFILES_CACHE}"
-    done
-
-    profile_data=()
+    printf '%s\n' "${profile_data[@]}" >> "${PROFILES_CACHE}"
 
     if [[ ! -s "${PROFILES_CACHE}" ]]; then
         print_msg "${MSG_PREFIX} ERROR (32): profiles cache file is empty."
@@ -944,8 +911,7 @@ set_profile() {
     declare -Ag profile_services_map=()
     declare -ag profile_service_ids=()
     declare -Ag service_count_map=()
-    local line prof_name prof_type prof_line_nr prof_services
-    local line_nr=0
+    local line prof_name prof_type prof_line_nr prof_services line_nr=0
     
     while IFS= read -r line; do
         
@@ -1060,7 +1026,7 @@ mfa_login() {
 
         (( ++line_nr < start_line )) && continue
 
-        trimmed=$(trim "$line")
+        trimmed="${line// /}"
 
         [[ ${trimmed:0:1} == "[" ]] && break
 
@@ -1120,10 +1086,10 @@ sso_login() {
 get_caller_identity() {
     
     local target_profile="$1"
-    local backup_url=""
+    unset backup_url
 
     if [[ -n "$AWS_ENDPOINT_URL" ]]; then
-        backup_url="$AWS_ENDPOINT_URL"
+        local backup_url="$AWS_ENDPOINT_URL"
         unset AWS_ENDPOINT_URL
     fi
 
@@ -1165,7 +1131,7 @@ iam_global_config() {
         
         (( ++line_nr < start_line )) && continue
 
-        line=$(trim "$line")
+        line="${line// /}"
         [[ "${line:0:1}" == "[" ]] && break
         
         [[ -z "$line" ]] && continue
@@ -1207,7 +1173,7 @@ iam_service_config() {
     local select_msg="${MSG_PREFIX} ${BRIGHT_WHITE}${profile_services_sum}${RESET} services found. Select (use Tab):"
     select_prompt 2 "profile_service_ids[@]" || return 0
     
-    for service_id in "${selected_items[@]}"; do
+    for service_id in "${selected[@]}"; do
         [[ -n "$service_id" ]] && {
             get_service_values || return 1
         }
@@ -1230,15 +1196,14 @@ build_service_section() {
 
     section_list=()
     declare -Ag lnr_section
-    local line trimmed scope section_name service_seen header_name
-    local line_nr=0
+    local line trimmed scope section_name service_seen header_name line_nr=0
     select_item_count=0
 
     while IFS= read -r line; do
 
         (( ++line_nr < start_line )) && continue
 
-        trimmed=$(trim "$line")
+        trimmed="${line// /}"
 
         if [[ "$trimmed" == "[default]" ]]; then
             [[ "${AWS_PROFILE}" != "default" ]] && break
@@ -1303,15 +1268,13 @@ get_service_values() {
     if [[ "${service_count:-0}" -gt 1 ]]; then
 
         build_service_section "$service_id" || return 1
-        local select_msg="${MSG_PREFIX} Multiple ${service_id} services found. Select one:"
+        local select_msg="${MSG_PREFIX} Multiple ${BRIGHT_WHITE}${service_id}${RESET} services found. Select one:"
         select_prompt 1 "section_list[@]" || return 0
         start_line="${lnr_section[${selected:9}]}"
     
     fi
 
-    local line trimmed
-    local line_nr=0
-    local in_block=0
+    local line trimmed line_nr=0 in_block=0
     
     SERVICE_REGION=""
     SERVICE_ENDPOINT=""
@@ -1319,7 +1282,7 @@ get_service_values() {
         
         (( ++line_nr < start_line )) && continue
 
-        trimmed=$(trim "$line")
+        trimmed="${line// /}"
         
         if (( in_block == 1 )); then
 
@@ -1347,7 +1310,7 @@ validate_service_values() {
     
     if [[ -n "$SERVICE_ENDPOINT" ]]; then
 
-        local sid_upper="$(to_uppercase "$service_id")"
+        local sid_upper="${service_id@U}"
         printf -v "AWS_ENDPOINT_URL_${sid_upper}" '%s' "$SERVICE_ENDPOINT"
         export AWS_ENDPOINT_URL_$sid_upper
 
@@ -1357,11 +1320,6 @@ validate_service_values() {
 
     [[ -n "$SERVICE_REGION" ]] && SWA_REGIONS+=("$SERVICE_REGION")
 
-}
-
-
-to_uppercase() {
-    printf '%s' "$1" | tr '[:lower:]' '[:upper:]'
 }
 
 
@@ -1377,7 +1335,7 @@ verify_iam_config() {
             fi
 
             # If s3 endpoint_url is required (-i -3 -5 options) but not explicitly defined in config file,
-            # below functions are called to define s3 endpoint_url.
+            # get_caller_identity and set_aws_s3_url are invoked to define s3 endpoint_url.
             [[ "${FLAG_MINIO}" -eq 1 ]] && local URL_REQUIRED=1
             [[ "${FLAG_S3CMD}" -eq 1 ]] && local URL_REQUIRED=1
             [[ "${FLAG_S5CMD}" -eq 1 ]] && local URL_REQUIRED=1
@@ -1405,6 +1363,7 @@ verify_iam_config() {
             fi
 
         fi
+
     fi
 
 
@@ -1428,7 +1387,7 @@ verify_iam_config() {
     if [[ -n "${AWS_REGION}" ]]; then
         if [[ ${#SWA_REGIONS[@]} -gt 0 ]]; then
 
-            set_unique_list SWA_REGIONS
+            remove_duplicates SWA_REGIONS
             REGIONS_OPT=()
           
             for R in "${SWA_REGIONS[@]}"; do
@@ -1451,14 +1410,12 @@ verify_iam_config() {
 }
 
 
-# removes duplicate entries from an array list.
-set_unique_list() {
+remove_duplicates() {
 
     local -n arr="$1"
     mapfile -t arr < <(printf "%s\n" "${arr[@]}" | sort -u)
 
 }
-
 
 
 
@@ -1558,7 +1515,7 @@ export_credentials() {
         return 1
     fi
 
-    err_line=""
+    unset err_line
     while IFS= read -r line; do
 
         [[ -z "$line" ]] && continue
@@ -1615,16 +1572,15 @@ mask_credentials() {
 get_credentials_option(){
 
     local start_line=$(( profile_line_nr + 1 ))
-    local line cred_option_value
-    local line_nr=0
+    local cred_option_value trimmed key val line line_nr=0
     
     while IFS= read -r line; do
 
         (( ++line_nr < start_line )) && continue
 
-        local trimmed=$(trim "$line")
-        local key="${trimmed%%=*}"
-        local val="${trimmed#*=}"
+        trimmed="${line// /}"
+        key="${trimmed%%=*}"
+        val="${trimmed#*=}"
     
         [[ "$key" == "credential_source" ]] && cred_option_value="$val"
 
@@ -1720,14 +1676,13 @@ get_fips_dualstack() {
     USE_DUALSTACK=0
 
     local start_line=$(( profile_line_nr + 1 ))
-    local line_nr=0 
-    local line trimmed svc
+    local line trimmed svc line_nr=0
 
     while IFS= read -r line; do
 
         (( ++line_nr < start_line )) && continue
         
-        trimmed=$(trim "$line")
+        trimmed="${line// /}"
         [[ "${trimmed:0:1}" == "[" ]] && break
 
         for svc in "${profile_service_ids[@]}"; do
@@ -2050,7 +2005,7 @@ verify_config_ca() {
                 if check_http; then
                     print_msg "${MSG_PREFIX} INFO: Endpoint only supports HTTP."
                 else
-                    print_msg "${MSG_PREFIX} ERROR (48): could not connect to ${HOST_BASE} on port 443 and 80"
+                    print_msg "${MSG_PREFIX} ERROR (48): could not connect to ${HOST_BASE} on port 443 and 80."
                     return 1
                 fi
                 return 0
@@ -2089,9 +2044,8 @@ download_ca_bundle() {
         return 1
     }
 
-    # Unlike the Windows, Linux does not require removing colons from filenames.
-    # However, I am removing and replacing it with hyphen (same as swa's batch script),
-    # so the certificate filename is consistent in both platforms.
+    # Unlike Windows, Linux allows colons in filenames.
+    # However, to keep certificate filenames consistent in both platforms (as in the batch version of swa), colons are replaced with hyphens.
     CA_FILENAME="${HOST_BASE//:/-}"
     SWA_CA="${CERT_DIR}/${CA_FILENAME}-chain.pem"
 
@@ -2101,34 +2055,27 @@ download_ca_bundle() {
         return 1
     }
 
-    if curl -q -s -k -w "%{certs}" "$SWA_TARGET_S3URL" > "$RAW_CERT"; then
-        print_msg "${MSG_PREFIX} INFO: Successfully downloaded raw certificate chain."
-    else
+    curl -q -s -k -w "%{certs}" "$SWA_TARGET_S3URL" > "$RAW_CERT" || {
         print_msg "${MSG_PREFIX} ERROR (57): failed to download raw certificate chain from $SWA_TARGET_S3URL"
         return 1
-    fi
+    }
 
-    if extract_cert_blocks; then
-        print_msg "${MSG_PREFIX} INFO: Successfully extracted certificates."
-    else
+    extract_cert_blocks || { 
         print_msg "${MSG_PREFIX} ERROR (58): failed to extract ca_bundle from raw certificate chain."
         return 1
-    fi
+    }
 
-    if curl "${CURL_OPTS[@]}" --ssl-revoke-best-effort --cacert "$SWA_CA" "$SWA_TARGET_S3URL"; then
-        print_msg "${MSG_PREFIX} INFO: Successfully verified new ca_bundle."
-    else
+    curl "${CURL_OPTS[@]}" --ssl-revoke-best-effort --cacert "$SWA_CA" "$SWA_TARGET_S3URL" || {
         print_msg "${MSG_PREFIX} ERROR (59): new ca_bundle is invalid."
         return 1
-    fi
+    }
 
-
-    if aws configure set profile."$AWS_PROFILE".ca_bundle "$SWA_CA"; then
-        print_msg "${MSG_PREFIX} INFO: Successfully added new ca_bundle path to config file."
-    else
+    aws configure set profile."$AWS_PROFILE".ca_bundle "$SWA_CA" || { 
         print_msg "${MSG_PREFIX} ERROR (60): failed to update AWS config with new ca_bundle path."
         return 1
-    fi
+    }
+
+    print_msg "${MSG_PREFIX} INFO: Successfully downloaed new ca_bundle and added path to config file."
 
     return 0
 
@@ -2138,9 +2085,8 @@ download_ca_bundle() {
  
 extract_cert_blocks() {
 
-    local in_cert=0
-    local line
-
+    local line in_cert=0
+    
     :> "$SWA_CA" || return 1
 
     while IFS= read -r line; do
@@ -2156,7 +2102,6 @@ extract_cert_blocks() {
 
 
 
-# Invoked when -3 option is used to update config file of s3cmd.
 set_s3cmd() {
 
     if [[ "$profile_type" == "iam" ]]; then
@@ -2249,8 +2194,8 @@ set_s3cmd() {
 }
 
 
-# Invoked when -i option is used to updates mc MinIO client's config file for s3 alias and, 
-# prompts user to export MC_HOST_S3 envirnoment variable.
+
+
 set_minio() {
 
     if ! command -v mc >/dev/null 2>&1; then
@@ -2387,14 +2332,13 @@ set_minio() {
 get_region() {
 
     local start_line=$(( profile_line_nr + 1 ))
-    local line_nr=0
-    local line trimmed srv
-
+    local trimmed srv line line_nr=0
+    
     while IFS= read -r line; do
         
         (( ++line_nr < start_line )) && continue
 
-        local trimmed=$(trim "$line")
+        trimmed="${line// /}"
         [[ "${trimmed:0:1}" == "[" ]] && return 0
 
         for srv in "${profile_service_ids[@]}"; do
@@ -2425,15 +2369,14 @@ get_region() {
 get_sso_region() {
 
     local start_line=$(( profile_line_nr + 1 ))
-    local line_nr=0
-    local line trimmed
+    local trimmed line line_nr=0
     local SSO_SESSION_NAME="" SSO_REGION=""
 
     while IFS= read -r line; do
         
         (( ++line_nr < start_line )) && continue
 
-        local trimmed=$(trim "$line")
+        trimmed="${line// /}"
 
         if [[ "${trimmed:0:12}" == "sso_session=" ]]; then
             SSO_SESSION_NAME="${trimmed:12}"
@@ -2455,10 +2398,10 @@ get_sso_region() {
         return 1
     fi
 
-    local in_block=0
+    local trimmed in_block=0
     while IFS= read -r line; do
 
-        local trimmed=$(trim "$line")
+        trimmed="${line// /}"
 
         if [[ $in_block -eq 1 ]]; then
             [[ "${trimmed:0:11}" == "sso_region=" ]] && SSO_REGION="${trimmed:11}"
@@ -2481,15 +2424,6 @@ get_sso_region() {
 
 
 
-# set_s5cmd defines endpoint_url to export S3_ENDPOINT_URL variable of s5cmd.
-#
-# Invoked only for non-IAM profile types. For IAM user profiles, 
-# s3 endpoint is either obtained directly from config file or already 
-# resolved earlier in verify_iam_config function.
-#
-# Workflow:
-#  1. Determine AWS region of selected profile.
-#  2. Invoke set_aws_s3_url to construct s3 endpoint_url.
 set_s5cmd() {
 
     if [[ "$profile_type" == "sso" ]]; then
@@ -2541,8 +2475,7 @@ list_profiles() {
         [ext]="External Process"
     )
 
-    local pname ptype lnr services
-    local line_nr=0
+    local pname ptype lnr services line_nr=0
     while read -r pname ptype lnr services; do
         
         (( ++line_nr < 2 )) && continue
@@ -2550,8 +2483,7 @@ list_profiles() {
         profile_list+=("$pname")
         PROFILE_TYPE["$pname"]="${PTYPE_MAP[$ptype]}"
 
-        local sum=0
-        local svc id count
+        local svc id count sum=0
         for svc in $services; do
             IFS=':' read -r id count <<< "$svc"
             (( sum += count ))
@@ -2560,8 +2492,7 @@ list_profiles() {
 
     done < "${PROFILES_CACHE}"
 
-    local max_len=0 
-    local prn
+    local prn max_len=0
     for prn in "${profile_list[@]}"; do
         (( ${#prn} > max_len )) && max_len=${#prn}
     done
@@ -2574,8 +2505,7 @@ list_profiles() {
             "-----------------" \
             "--"
 
-        local total_profiles=0
-        local total_services=0
+        local total_profiles=0 total_services=0
 
         for prn in "${profile_list[@]}"; do
             printf "%-${max_len}s    %-17s %s\n" \
@@ -2601,89 +2531,46 @@ list_profiles() {
 
 
 
-# select prompt is the main dispatcher for all interactive selection prompts.
-# This function invokes `gum` CLI whenever user is asked to select one or more
-# items from a list.
-#
-# Argument-1 → Select mode
-# Argument-2 → Select options
+# select prompt is the interactive selection prompts.
 # 
-# Selection modes:
 #  - Mode 1 (single_select): user selects exactly one item. It auto-selects if only one option.
 #  - Mode 2 (custom_select): user may select one or more items.
-#
-# Selection menu type:
 #  - For lists ≤ 15 items, uses `gum choose` for direct navigation.
 #  - For lists > 15 items, uses `gum filter` to allow search by typing.
-#
-# Notes:
-#  - Prompt options are passed indirectly to preserve quotes when used.
-#  - Prompt header message (`select_msg`) is defined prior to invoking select prompt.
-#    Since this variable name is consistent across the script, it is not passed as argument.
-#    In contrast, prompt options (`select_opts`) vary by context and source, so it is passed as argument.
 select_prompt() {
-    
-    local select_mode="$1"
-    local select_opts_tmp="$2"
-    local select_opts=("${!select_opts_tmp}")
-    
-    if [[ ${#select_opts[@]} -eq 0 ]]; then
-        print_msg "${MSG_PREFIX} ERROR (36): no options provided for gum selection list" >&2
+
+    local mode="$1"
+    local opts_tmp="$2"
+    local opts=("${!opts_tmp}")
+    local base_cmd cmd
+
+    [[ -z "$mode" ]] && mode=1
+
+    (( ${#opts[@]} == 0 )) && {
+        printf '%s\n' "${MSG_PREFIX} ERROR (4): no options provided for select prompt." >&2
         return 1
+    }
+
+    if (( ${#opts[@]} > 15 )); then
+        base_cmd=(gum filter)
+    else
+        base_cmd=(gum choose)
     fi
 
-    [[ -z "$select_mode" ]] && select_mode=1
-
-    if [[ "$select_mode" -eq 1 ]]; then
-        single_select || return 1
+    if [[ "$mode" == 1 ]]; then
+        cmd=("${base_cmd[@]}" --select-if-one --header "$select_msg" "${opts[@]}")
+        unset selected
+        selected="$("${cmd[@]}")"
+        [[ -z "$selected" ]] && return 1
     else
-        custom_select || return 1
+        cmd=("${base_cmd[@]}" --no-limit --header "$select_msg" "${opts[@]}")
+        declare -ag selected
+        mapfile -t selected < <("${cmd[@]}")
+        (( ${#selected[@]} == 0 )) && return 1
     fi
 
     return 0
 
-}
-
-single_select() {
-    
-    selected=""
-    local select_command
-    if (( ${#select_opts[@]} > 15 )); then
-        select_command=(gum filter --header "$select_msg" "${select_opts[@]}")
-    else
-        select_command=(gum choose --select-if-one --header "$select_msg" "${select_opts[@]}")
-    fi
-
-    selected="$("${select_command[@]}")"
-
-    [[ -z "$selected" ]] && return 1
-
-    return 0
-
-}
-
-custom_select() {
-
-    local select_command
-
-    if (( ${#select_opts[@]} > 15 )); then
-        select_command=(gum filter --no-limit --header "$select_msg" "${select_opts[@]}")
-    else
-        select_command=(gum choose --no-limit --header "$select_msg" "${select_opts[@]}")
-    fi
-
-    declare -ag selected_items
-    mapfile -t selected_items < <("${select_command[@]}")
-    
-    (( ${#selected_items[@]} == 0 )) && return 1
-
-    return 0
-
-}
-
-
-trim() {
-    printf '%s' "$1" | tr -d '[:space:]'
 }
 
 
@@ -2692,15 +2579,14 @@ print_msg() {
 }
 
 
-
 main() {
 
    local _ARG="${1:-}"
-   local _VERSION="1.0.0"
+   local _VERSION="1.1.0"
    local _REPO="https://github.com/bruckware/swa"
 
-   LC_ALL=C
-   LANG=C
+   export LC_ALL=C
+   export LANG=C
 
    ESC=$'\033'
    RESET="${ESC}[0m"
@@ -2725,14 +2611,10 @@ main() {
       return 1 
    fi
    
-   # Set options and alter if argurment is passed, check requirements, 
-   # select profile, get config values.
    set_options || return 1
    requirement || return 1
    set_profile || return 1
    get_configs || return 1
-
-    
    
    # Export variables on running shell by printing `export` command to stdout for `eval`.
    # To prevent conflict of AWS variables from previous runs, first, clears all AWS_* variables 

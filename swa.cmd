@@ -1,7 +1,7 @@
 ::
 ::     script: swa.cmd
-::    purpose: AWS context switcher for Command-Prompt and PowerShell
-::    version: 1.0.0
+::    purpose: AWS context switcher for Windows Command-Prompt and PowerShell
+::    version: 1.1.0
 ::    license: MIT
 ::     author: Hamed Davodi <retrogaming457 [at] gmail [dot] com>
 :: repository: https://github.com/bruckware/swa
@@ -9,11 +9,15 @@
 
 
 @echo off
+if not "%CMDEXTVERSION%"=="2" ( 
+    echo ERROR: Command Extentions are not enabled.
+    exit /b 1 2>nul
+)
+
 setlocal EnableDelayedExpansion
 
-set "_ARG="
 set "_ARG=%1"
-set "_VERSION=1.0.0"
+set "_VERSION=1.1.0"
 set "_REPO=https://github.com/bruckware/swa"
 
 set "ESC="
@@ -34,7 +38,17 @@ set "GUM_FILTER_INDICATOR_FOREGROUND=#FFA500"
 set "GUM_FILTER_CURSOR_TEXT_FOREGROUND=#FFA500"
 set "GUM_FILTER_SELECTED_PREFIX_FOREGROUND=#FFA500"
 
-call :set_options || goto :eof
+set "FLAG_CREDENTIALS=0"
+set "FLAG_VERIFY_URL=0"
+set "FLAG_LISTING=0"
+set "FLAG_MFA=0"
+set "FLAG_CACHE=0"
+set "FLAG_MINIO=0"
+set "FLAG_S3CMD=0"
+set "FLAG_S5CMD=0"
+
+if defined _ARG call :set_options || goto :eof
+
 call :requirement || goto :eof
 call :set_profile || goto :eof
 call :get_configs || goto :eof
@@ -46,22 +60,19 @@ goto :eof
 
 
 
-
 :show_help
 echo.
-echo  swa - an interactive AWS context switcher for Windows Command-Prompt and PowerShell
-echo  This tool uses environment variables to switch profile and avoids editing of config
-echo  file for this purpose.
+echo  Interactive AWS context switcher for Windows Command-Prompt and PowerShell.
 echo.
-echo  swa exports variables of the global settings ^& service-specific settings, including 
-echo  all 380 AWS services. Note environment variables are only exported in current shell
-echo  session and, this tool does not modify system-wide or user-wide variables table.
+echo  swa uses environment variables to switch profile, exporting variables of the global 
+echo  settings and service-specific settings, including all 380 AWS services. Environment 
+echo  variables are exported in current shell session. System-wide or user-wide variables 
+echo  table are not modified.
 echo.
 echo  swa is optimized to work with large config files, containing numerous profiles from 
 echo  all AWS profile types ^(IAM User, SSO, Assume Role, Web Identity, External Process^).
 echo  it can parse values of profiles with services header as those values cannot be read
-echo  by aws cli itself and,supports Amazon s3 and any s3-compatible implementation which
-echo  which is using AWS s3 API.
+echo  by aws cli itself.
 echo. 
 echo  In addition, it faciliates working with self-hosted s3 services in case s3 endpoint
 echo  is using self-signed certificate and, it exports the config file of other s3 client
@@ -75,10 +86,10 @@ echo        -l, --list      List all profiles
 echo        -m, --mfa       Prompt for MFA-Login if profile has mfa_serial option
 echo        -f              Force cache update for both profiles and services list
 echo        -c              Export AWS credentials as environment variables
-echo        -u              Verify endpoint_url access and download CA bundle
+echo        -u              Verify endpoint_url access and download CA bundle if required
 echo        -i              Update MinIO client ^(mc^) config file ^f^o^r s3 alias
 echo        -3              Update config file of s3cmd
-echo        -5              Export s3 endpoint_url environment variable for s5cmd
+echo        -5              Export S3_ENDPOINT_URL for s5cmd
 echo.
 goto :eof
 
@@ -87,28 +98,13 @@ goto :eof
 :: ---------------------------------------------------------------------------
 :: This script is intentionally heavily commented.
 :: While this may differ from the 'minimal comments' guideline as mentioned in
-:: Clean Code, this approach is deliberate in order to:
-::
-:: - Serve as both source code and documentation
-:: - Avoid relying on a separate file for documentation
-:: - Capture workflow, intent, and decision rationale
+:: Clean Code, this approach is deliberate to serve as both source code and documentation
+:: and avoid relying on a separate file.
 :: ---------------------------------------------------------------------------
 
 
-:: set default options and updates one if an argument is passed.
-:: at most one command-line argument is allowed per invocation.
+:: updates option if argument is passed (only one argument allowed per invocation)
 :set_options
-set "FLAG_CREDENTIALS=0"
-set "FLAG_VERIFY_URL=0"
-set "FLAG_LISTING=0"
-set "FLAG_MFA=0"
-set "FLAG_CACHE=0"
-set "FLAG_MINIO=0"
-set "FLAG_S3CMD=0"
-set "FLAG_S5CMD=0"
-
-if not defined _ARG exit /b 0
-
 set "VALID_FLAGS=-h --help -v --version -l --list -m --mfa -f -c -u -i -3 -5"
 set "FOUND_FLAG="
 
@@ -296,8 +292,7 @@ goto :eof
 ::   - Timestamp stored in profiles cache matches current timestamp of config file
 :: otherwise or if -f option is used, exits with code 1 to invoke build_cache subroutine
 ::
-:: Note that if swa is invoked with -f option, if profile cache and services list exist,
-:: they are overwritten and a new cache is built.
+:: Note that if swa is invoked with -f option, if profile cache and services list exist, they are overwritten and a new cache is built.
 :verify_cache
 if "%FLAG_CACHE%"=="1" exit /b 1
 
@@ -385,9 +380,7 @@ goto :eof
 ::   Service identifier key alone is sufficient for all current use cases:
 ::     - Validating service identifiers in config file
 ::     - Displaying options in the user selection menu
-::     - Defining service-specific endpoint URLs
-::       (service identifier is converted to uppercase and appended to
-::        AWS_ENDPOINT_URL_<UPPERCASE_SERVICE_ID>)
+::     - Defining service-specific endpoint URLs (service identifier is converted to uppercase and appended to AWS_ENDPOINT_URL_<UPPERCASE_SERVICE_ID>)
 :download_services_list
 set "AWS_SS_TABLE=%SWA_DIR%\aws_ss_table.html"
 copy nul "%AWS_SS_TABLE%" >nul 2>&1 || (
@@ -402,13 +395,12 @@ set "AWS_SS_URL=https://docs.aws.amazon.com/sdkref/latest/guide/ss-endpoints-tab
 
 set "count=0"
 set "srv_id="
-:: In this and other similar cases, using indirect invocation to use of primary batch parser since paths are quoted
+:: In this and other similar cases, using indirect invocation to use the primary batch parser since paths are quoted
 for /f "usebackq tokens=1* delims=>" %%A in (`call "%FINDSTR_EXE%" /C:" <code class=" "%AWS_SS_TABLE%"`) do (
     set "srv_id=%%~B"
     set "srv_id=!srv_id:</code>=!"
     set "srv_id=!srv_id: =!"
     
-    :: Take the value of 2nd row for each group of 3 rows
     set /a count+=1
     if "!count!"=="2" set "aws_services_list=!aws_services_list! !srv_id!"
     if "!count!"=="3" set "count=0"
@@ -495,8 +487,7 @@ exit /b 0
 ::  4. Validate that cache file is non-empty to confirm a successful write.
 ::
 :: Notes:
-::  - Due to the lack of native array support in Batch, profile data is stored
-::    in dynamically named variables (SWA_PDATA_<index>).
+::  - Due to the lack of native array support in Batch, profile data is stored in dynamically named variables (SWA_PDATA_<index>).
 ::  - Each expanded variable corresponds to a single cache entry.
 :cache_profiles_data
 copy nul "%PROFILES_CACHE%" >nul 2>&1 || (
@@ -559,9 +550,7 @@ goto :eof
 ::     all available profiles into the profile_list_cred variable
 ::     (see comments above get_credentials_profiles for details).
 ::
-::   - Validate config file headers to ensure only the allowed character set
-::     is used (step 1: regex-based validation).
-::
+::   - Validate config file headers to ensure only the allowed character set is used (step 1: regex-based validation).
 ::   - Parse the config file and identify one of the supported header types:
 ::       * [default]
 ::       * [profile ...]
@@ -569,9 +558,7 @@ goto :eof
 ::       * [sso-session ...]
 ::     Anything else → hard error.
 ::
-::   - For all supported header types, perform the second step of character
-::     set validation.
-::
+::   - For all supported header types, perform the second step of character set validation.
 ::   - For profile headers:
 ::       * Determine the profile type → set_profile_type subroutine
 ::       * Collect any indented services and their count → get_profile_services subroutine
@@ -837,7 +824,7 @@ if defined profile_list_cred (
 
     for %%P in (%profile_list_cred%) do (           
     
-        if "!profile_name!"=="%%P" set "profile_type=iam" && exit /b 0
+        if "%%P"=="!profile_name!" set "profile_type=iam" && exit /b 0
     
     )
 
@@ -988,11 +975,11 @@ for /f "skip=%profile_line_nr% usebackq tokens=* delims=" %%L in ("%CONF_FILE%")
     if defined USE_MFA (
 
         gum.exe confirm "%MSG_PREFIX% %GREEN%%AWS_PROFILE%%RESET% profile is using MFA option. Invoke 'aws configure mfa-login' ?" || exit /b 0
-        aws.exe configure mfa-login --profile "%AWS_PROFILE%" && call :info_30
+        aws.exe configure mfa-login --profile "%AWS_PROFILE%" && call :info_27
         exit /b 0
 
     ) else (
-        call :info_31
+        call :info_28
     )
 
 goto :eof
@@ -1208,35 +1195,33 @@ for /f "%skip_op% usebackq tokens=1* delims=:" %%L in (`call "%FINDSTR_EXE%" /N 
         call :to_uppercase service_id
         set "AWS_ENDPOINT_URL_!service_id!=!SERVICE_ENDPOINT!"
     ) else (
-        call :info_23
+        call :info_20
     )
 
-    if defined SERVICE_REGION (
-        set "SWA_REGIONS=!SWA_REGIONS! !SERVICE_REGION!"
-    )
+    if defined SERVICE_REGION set "SWA_REGIONS=!SWA_REGIONS! !SERVICE_REGION!"
 
 goto :eof
 
 
 
-:: Verify values extracted for IAM User profile
-:: If s3 endpoint_url is required (-i -3 -5 options) but not explicitly defined in config file,
-:: set_caller_identity and set_aws_s3_url subroutines are called to define s3 endpoint_url.
+
 :verify_iam_config
+:: If s3 endpoint_url is required (-i -3 -5 options) but not explicitly defined in config file,
+:: get_caller_identity and set_aws_s3_url subroutines are called to define s3 endpoint_url.
 if not defined AWS_ENDPOINT_URL (
     if not defined AWS_ENDPOINT_URL_S3 (
 
-        if "!FLAG_VERIFY_URL!"=="1" ( call :info_12 & set "FLAG_VERIFY_URL=-1" )
+        if "!FLAG_VERIFY_URL!"=="1" call :info_12 && set "FLAG_VERIFY_URL=-1"
 
         if "!FLAG_MINIO!"=="1" set "URL_REQUIRED=1"
         if "!FLAG_S3CMD!"=="1" set "URL_REQUIRED=1"
         if "!FLAG_S5CMD!"=="1" set "URL_REQUIRED=1"
         
         if "!URL_REQUIRED!"=="1" (
-           call :info_24
+           call :info_21
            call :get_caller_identity "!AWS_PROFILE!" || (
                 call :error_33 
-                call :info_27
+                call :info_24
                 exit /b 1 
            )
            call :set_aws_s3_url || exit /b 1
@@ -1256,7 +1241,7 @@ if defined SWA_CA (
 
     ) else (
 
-       call :info_29
+       call :info_26
        call :verify_url || exit /b 1
        set "FLAG_VERIFY_URL=-1"
 
@@ -1267,7 +1252,7 @@ if defined SWA_CA (
 :: If regions found under global and service-specific settings are different, user is prompted to select one.
 if defined AWS_REGION (
     if defined SWA_REGIONS (
-        call :set_unique_list SWA_REGIONS
+        call :remove_duplicates SWA_REGIONS
         for %%R in (!SWA_REGIONS!) do (
             if /i "!AWS_REGION!" neq "%%R" (
                 set "SWA_REGION_SELECT=1"
@@ -1448,7 +1433,7 @@ goto :eof
 
 
 
-:: Below subroutine defines effective s3_endpoint_url which is used internally.
+:: defines effective s3_endpoint_url which is used internally.
 :set_target_s3_url
 if defined AWS_ENDPOINT_URL_S3 (
     set "SWA_TARGET_S3URL=!AWS_ENDPOINT_URL_S3!"
@@ -1521,10 +1506,6 @@ goto :eof
 
 
 
-
-
-
-
 :: Get credentials option prepares credentials for AssumeRole-based profiles when credentials
 :: are required e.g. -c, -i, -3 options.
 ::
@@ -1556,7 +1537,7 @@ for /f "skip=%profile_line_nr% usebackq tokens=1* delims==" %%A in ("%CONF_FILE%
     if not defined cred_option_value ( call :error_72 & exit /b 1 )
        
     if /i "!cred_option_value!"=="Environment" (
-        call :info_26
+        call :info_23
         call :get_existing_credentials_envs && exit /b 0
         call :assumerole_credentials_source || exit /b 1
     ) else (
@@ -1564,7 +1545,7 @@ for /f "skip=%profile_line_nr% usebackq tokens=1* delims==" %%A in ("%CONF_FILE%
     )
 
     if "!assumerole_crd_pt!"=="sso" (
-        call :info_25
+        call :info_22
         call :sso_login "!assumerole_crd_pn!" || exit /b 1
     )
 
@@ -1588,13 +1569,12 @@ for %%a in (!profile_list!) do (
 
 if not defined filtered_list ( call :error_73 & exit /b 1 )
 
-call :info_28
+call :info_25
 set "select_msg=%MSG_PREFIX% Select profile:"
 call :select_prompt 1 filtered_list credentials_profile || exit /b 1
 set "assumerole_crd_pn=!selected!"
 set "assumerole_crd_pt=!%assumerole_crd_pn%_profile_type!"
 goto :eof
-
 
 
 :: If AssumeRole profile is using credentials_source option with
@@ -1615,11 +1595,6 @@ if defined SWA_ACCESS_KEY if defined SWA_SECRET_KEY (
     exit /b 0
 )
 exit /b 1
-
-
-
-
-
 
 
 
@@ -1790,7 +1765,7 @@ set "CERT_DIR=%CONF_DIR%certs"
 if not exist "%CERT_DIR%" ( 
     mkdir "%CERT_DIR%" >nul 2>&1 || (
         call :error_49
-        exit /b 1 
+        exit /b 1
     )
 )
 
@@ -1798,61 +1773,20 @@ set "CA_FILENAME=%HOST_BASE%"
 set "CA_FILENAME=%CA_FILENAME::=-%"
 set "SWA_CA=%CERT_DIR%\%CA_FILENAME%-chain.pem"
 set "RAW_CERT=%CERT_DIR%\raw_cert.txt"
+set "IGNORE_LINE=Subject Issuer Version Serial Signature Start Expire Public ecPublicKey ECC X509 RSA rsa("
+copy nul "%RAW_CERT%" >nul 2>&1 || ( call :error_50 & exit /b 1 )
 
-copy nul "%RAW_CERT%" >nul 2>&1 || (
-    call :error_50
-    exit /b 1
-)
+"%CURL_EXE%" %CURL_OPTS% -k -w %%{certs} "%SWA_TARGET_S3URL%" > "%RAW_CERT%" || ( call :error_51 & exit /b 1 )
+"%FINDSTR_EXE%" /B /V "%IGNORE_LINE%" "%RAW_CERT%" > "%SWA_CA%" || ( call :error_52 & exit /b 1 )
+"%CURL_EXE%" %CURL_OPTS% --ssl-revoke-best-effort --cacert "%SWA_CA%" "%SWA_TARGET_S3URL%" || ( call :error_53 & exit /b 1 )
+aws.exe configure set profile.%AWS_PROFILE%.ca_bundle "%SWA_CA%" 2>&1 || ( call :error_54 & exit /b 1 )
 
-set "rc="
-:: Intentionally extracting certificates in two steps (instead of piping) for better error handling
-"%CURL_EXE%" %CURL_OPTS% -k -w %%{certs} "%SWA_TARGET_S3URL%" > "%RAW_CERT%"
-set "rc=%errorlevel%"
-if "%rc%"=="0" (
-    call :info_19
-) else (
-    call :error_51
-    exit /b 1
-)
-
-set "rc="
-set "IGNORE_LINE=Subject Issuer Version Serial Signature Start Expire Public ecPublicKey X509 RSA rsa("
-"%FINDSTR_EXE%" /B /V "%IGNORE_LINE%" "%RAW_CERT%" > "%SWA_CA%"
-set "rc=%errorlevel%"
-if "%rc%"=="0" (
-    call :info_20
-) else (
-    call :error_52
-    exit /b 1
-)
-
-set "rc="
-"%CURL_EXE%" %CURL_OPTS% --ssl-revoke-best-effort --cacert "%SWA_CA%" "%SWA_TARGET_S3URL%"
-set "rc=%errorlevel%"
-if "%rc%"=="0" (
-    call :info_21
-) else (
-    call :error_53
-    exit /b 1
-)
-
-set "rc="
-aws.exe configure set profile.%AWS_PROFILE%.ca_bundle "%SWA_CA%" 2>&1
-set "rc=%errorlevel%"
-if "%rc%"=="0" (
-    call :info_22
-) else (
-    call :error_54
-    exit /b 1
-)
+call :info_19
 goto :eof
 
 
 
 
-
-:: Invoked when -i option is used to updates mc MinIO client's config file for s3 alias and, 
-:: prompts user to export MC_HOST_S3 envirnoment variable.
 :set_minio
 "%WHERE_EXE%" /q mc.exe || ( call :error_55 & exit /b 1 )
 
@@ -1880,7 +1814,7 @@ if "%profile_type%"=="iam" (
     if "%profile_type%"=="sso" (
         call :get_sso_region || exit /b 1
     ) else (
-        call :get_region 
+        call :get_region
     )
 
     call :export_credentials "%AWS_PROFILE%" || ( call :error_70 & exit /b 1 )
@@ -1888,13 +1822,7 @@ if "%profile_type%"=="iam" (
 
 )
 
-
-mc.exe alias set s3 "%SWA_TARGET_S3URL%" "%AWS_ACCESS_KEY_ID%" "%AWS_SECRET_ACCESS_KEY%" --api S3v4 --path auto >nul 2>&1 || ( 
-    call :error_56
-    exit /b 1
-)
-
-
+mc.exe alias set s3 "%SWA_TARGET_S3URL%" "%AWS_ACCESS_KEY_ID%" "%AWS_SECRET_ACCESS_KEY%" --api S3v4 --path auto >nul 2>&1 || ( call :error_56 & exit /b 1 )
 
 if "!CA_REQUIRED!"=="1" (
 
@@ -1913,14 +1841,14 @@ if "!CA_REQUIRED!"=="1" (
     if not exist "!MC_CA_BUNDLE!" (
         
         copy "!SWA_CA!" "!MC_CA_BUNDLE!" >nul 2>&1 && (
-            call :info_32
+            call :info_29
         ) || (
             call :error_69
             exit /b 1
         )
 
     ) else (
-        call :info_33
+        call :info_30
     )
 
     set "CA_REQUIRED=-1"
@@ -1965,7 +1893,6 @@ goto :eof
 
 
 
-:: Invoked when -3 option is used to update config file of s3cmd.
 :set_s3cmd
 if "%profile_type%"=="iam" (
 
@@ -2040,15 +1967,6 @@ exit /b 2
 
 
 
-:: set_s5cmd defines endpoint_url to export S3_ENDPOINT_URL variable of s5cmd.
-::
-:: Invoked only for non-IAM profile types. For IAM user profiles, 
-:: s3 endpoint is either obtained directly from config file or already 
-:: resolved earlier in verify_iam_config subroutine.
-::
-:: Workflow:
-::  1. Determine AWS region of selected profile.
-::  2. Invoke set_aws_s3_url to construct s3 endpoint_url.
 :set_s5cmd
 if "%profile_type%"=="sso" (
    call :get_sso_region || exit /b 1
@@ -2138,17 +2056,9 @@ goto :eof
 
 
 :: select prompt is the main dispatcher for all interactive selection prompts.
-:: This subroutine invokes `gum` CLI whenever user is asked to select one or more
-:: items from a list.
 ::
-:: Argument-1 → Select mode
-:: Argument-2 → Select options
-:: 
-:: Selection modes:
-::  - Mode 1 (single_select): user selects exactly one item. It auto-selects if only one option.
+::  - Mode 1 (single_select): user selects exactly one item (auto-selects if only one option).
 ::  - Mode 2 (custom_select): user may select one or more items.
-::
-:: Selection menu type:
 ::  - For lists ≤ 15 items, uses `gum choose` for direct navigation.
 ::  - For lists > 15 items, uses `gum filter` to allow search by typing.
 ::
@@ -2204,14 +2114,7 @@ goto :eof
 
 
 
-:: Below subroutine is used to convert lowercased service_id values to uppercase before appending
-:: them to AWS_ENDPOINT_URL_ variable.
-::
-:: Notes:
-::  - Batch provides no native string case-conversion functionality.
-::  - Conversion is implemented by iteratively replacing each lowercase letter
-::    with its uppercase equivalent using delayed expansion.
-::  - The target variable is updated in place with the converted value.
+:: convert lowercased service_id values to uppercase before appending them to AWS_ENDPOINT_URL_ variable.
 :to_uppercase
 set "target_temp=%~1"
 set "str="
@@ -2228,20 +2131,7 @@ goto :eof
 
 
 
-
-:: set_unique_list removes duplicate entries from a space-delimited list.
-::
-:: Workflow:
-::  1. Accepts the name of a variable containing a space-delimited list.
-::  2. Resolves the variable value via indirect expansion.
-::  3. Iterates over each list item.
-::  4. Uses dynamically named guard variables (SWA_DUP_<item>) to track previously seen entries.
-::  5. Appends unseen items to the result list.
-::  6. Writes the unique list back to the original variable.
-::
-:: Note:
-::  - Dynamic variables are prefixed with `SWA_` to allow bulk cleanup at start-up.
-:set_unique_list
+:remove_duplicates
 set "temp_dup_list=%~1"
 call set "duped_list=%%%temp_dup_list%%%"
 
@@ -2369,44 +2259,16 @@ goto :eof
 
 
 
-:: Detects whether the current script was launched from Command-Prompt or PowerShell, 
-:: and sets PARENT_SHELL value accordingly.
-::
-:: Since Windows Batch does not provide a reliable way to identify the calling shell,
-:: this implementation uses a pragmatic, non-standard approach by inspecting the contents
-:: the CMDCMDLINE dynamic environment variable.
-::
-:: Workflow:
-::  1. Default PARENT_SHELL to `cmd`.
-::  2. If ComSpec and CMDCMDLINE are identical, swa was invoked directly from cmd.exe.
-::  3. Otherwise, check whether CMDCMDLINE matches known PowerShell launch patterns for cmd.exe:
-::       - <ComSpec> /c ""
-::       - "<ComSpec>" /c
-::     If match is found, parent shell is assumed to be PowerShell.
-::
-:: Notes:
-::  - While it may appear sufficient to assume PowerShell as the caller whenever 
-::    ComSpec differs from CMDCMDLINE and we can conclude the whole caller detection
-::    in a single if-else clause, this logic is intentionally more explicit because
-::    different Windows versions, launch mechanisms etc. can produce varying command-line 
-::    patterns and I have not tested all of them.
-:get_parent_shell
-set "PARENT_SHELL=cmd"
-if /i "%ComSpec%"=="%CMDCMDLINE%" exit /b 0
-set "PS_LAUNCH_MODE1=%ComSpec% /c \"\""
-set "PS_LAUNCH_MODE2=\"%ComSpec%\" /c"
-echo %CMDCMDLINE% | "%FINDSTR_EXE%" /I /C:"%PS_LAUNCH_MODE1%" >nul && ( set "PARENT_SHELL=ps" && exit /b 0 )
-echo %CMDCMDLINE% | "%FINDSTR_EXE%" /I /C:"%PS_LAUNCH_MODE2%" >nul && set "PARENT_SHELL=ps"
-exit /b 0
-
-
 
 :: Below subroutine creates the main SWA initialization script which exports
-:: AWS-related environment variables in the running shell after the main script 
-:: ends the local scope.
+:: AWS-related environment variables in the running shell after the main script ends the local scope.
 ::
 :: Workflow:
-::  1. Detect the parent shell (CMD vs PowerShell)
+::  1. Detect the parent shell (CMD vs PowerShell) using a non-standard but pragmatic method.
+::     If ComSpec and CMDCMDLINE are identical, swa was invoked directly from cmd.exe, otherwise
+::     it is PowerShell because it uses one of below launch patterns and therefore it is ps.
+::       - <ComSpec> /c ""
+::       - "<ComSpec>" /c
 ::  2. Create a common entry-point script (swa-init.cmd) as zero-byte file
 ::  3. Delegate shell-specific logic:
 ::      - CMD  : generates cmd-init.cmd and makes swa-init.cmd call it.
@@ -2414,7 +2276,8 @@ exit /b 0
 ::
 :: Therefore, swa-init.cmd either exports variables (CMD) or instructs user for dot-sourcing (PowerShell).
 :export_init
-call :get_parent_shell
+set "PARENT_SHELL=cmd"
+if /i "%ComSpec%" neq "%CMDCMDLINE%" set "PARENT_SHELL=ps"
 
 set "SWA_INIT=%SWA_DIR%\swa-init.cmd"
 copy nul "%SWA_INIT%" >nul 2>&1 || (
@@ -2437,15 +2300,6 @@ goto :eof
 
 :: cmd_init generates a Command-Prompt init script which exports variables to 
 :: the current CMD process.
-::
-:: Workflow:
-::  1. Create cmd-init.cmd as zero-byte file
-::  2. List all AWS_* variables currently defined in the process and
-::     SET commands to persist them in shell
-::  3. Optionally export:
-::      - AWS_CA_BUNDLE (when custom CA is required)
-::      - S3_ENDPOINT_URL (when -5 option is used)
-::      - MC_HOST_S3 (when -i option is used and user confirms exporting this variable)
 ::
 :: Note:
 ::  - swa-init.cmd first clears all AWS_* variables from the running shell to prevent
@@ -2508,20 +2362,6 @@ goto :eof
 
 :: ps_init generates the PowerShell init script which exports variables to 
 :: the current PowerShell process.
-::
-:: Workflow:
-::  1. Create ps-init.ps1 as zero-byte file
-::  2. Temporarily preserve AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE
-::  3. Remove all existing AWS_* variables from the PowerShell environment
-::  4. Restore preserved AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE
-::       - Note: if there are other AWS variables that you want to keep in the running 
-::         PowerShell session, adjust the logic in PS_INIT.
-::  5. Export current AWS_* variables.
-::  6. Optionally export:
-::      - AWS_CA_BUNDLE (when a custom CA is required)
-::      - S3_ENDPOINT_URL (when -5 option is used)
-::      - MC_HOST_S3 (when -i option is used and user confirms exporting this variable)
-::  7. Display exported variables on shell
 ::
 :: Note:
 ::   Since exporting variables in PowerShell requires dot-sourcing, swa-init.cmd prints 
@@ -2587,19 +2427,14 @@ goto :eof
 
 
 
-:: Following lines to the end of the script all are informational and error messages used
-:: throughout this script, implemented as callable labels (:info_N, :error_N).
-::
-:: Workflow:
-::  - Most of the labels prints a message and immediately returns to the caller except for
-::    some error messages that additionally call to print a related info message as well.
+:: Following lines to the end of the script all are informational and error messages.
 ::
 :: Design decision to use centralized messages in the Batch version of the script was made to avoid 
 :: repetitive ECHO statements and duplication. It helps keep the operational logic clear and concise.
 ::
 :: However, in Bash implementation of swa, info and error messages are emitted inline at the point
-:: of execution mainly because of how Bash version of swa has to be implemented and also, Bash’s function 
-:: model, variable scoping, and expressive syntax make this approach concise and readable.
+:: of execution mainly because of how Bash version of swa has to be implemented and also, Bash’s function model, 
+:: variable scoping and expressive syntax make this approach concise and readable in Bash environment.
 :info_1
 echo %MSG_PREFIX% INFO: Updating cache...
 goto :eof
@@ -2673,73 +2508,57 @@ echo %MSG_PREFIX% INFO: Endpoint only supports HTTP.
 goto :eof
 
 :info_19
-echo %MSG_PREFIX% INFO: Successfully downloaded raw certificate chain.
+echo %MSG_PREFIX% INFO: Successfully downloaed new ca_bundle and added path to config file.
 goto :eof
 
 :info_20
-echo %MSG_PREFIX% INFO: Successfully extracted certificates.
-goto :eof
-
-:info_21
-echo %MSG_PREFIX% INFO: Successfully verified new ca_bundle.
-goto :eof
-
-:info_22
-echo %MSG_PREFIX% INFO: Successfully added new ca_bundle path to config file.
-goto :eof
-
-:info_23
 echo %MSG_PREFIX% INFO: %BRIGHT_WHITE%!service_id!%RESET% service endpoint_url is not defined in config.
 goto :eof
 
-:info_24
+:info_21
 echo %MSG_PREFIX% INFO: endpoint_url is not defined. it is required for s3 client tool config file.
 echo %MSG_PREFIX% INFO: Attempting to define endpoint_url...
 goto :eof
 
-:info_25
+:info_22
 echo %MSG_PREFIX% INFO: Credentials source_profile %BRIGHT_WHITE%!assumerole_crd_pn!%RESET% is of ^t^ype SSO.
 echo %MSG_PREFIX% INFO: Verifying login status...
 goto :eof
 
-:info_26
+:info_23
 echo %MSG_PREFIX% INFO: %GREEN%%AWS_PROFILE%%RESET% profile uses %BRIGHT_WHITE%Environment%RESET% option for credential_source.
 goto :eof
 
-:info_27
+:info_24
 echo %MSG_PREFIX% INFO: credentials are not official AWS or incorrect parameter in config.
 goto :eof
 
-:info_28
+:info_25
 if !FLAG_CREDENTIALS! == 1 ( echo %MSG_PREFIX% INFO: credentials of another profile is required to export. & exit /b 0 )
 if !FLAG_S3CMD! == 1 ( echo %MSG_PREFIX% INFO: credentials of another profile is required for s3cmd config file. & exit /b 0 )
 if !FLAG_MINIO! == 1 ( echo %MSG_PREFIX% INFO: credentials of another profile is required for mc ^(MinIO^) config file. & exit /b 0 )
 goto :eof
 
-:info_29
+:info_26
 echo %MSG_PREFIX% INFO: ca_bundle defined in config file does not exist.
 echo %MSG_PREFIX% INFO: Verifying ca_bundle requirement...
 goto :eof
 
-:info_30
+:info_27
 echo %MSG_PREFIX% INFO: Successful MFA Login for %GREEN%%AWS_PROFILE%%RESET% profile.
 goto :eof
 
-:info_31
+:info_28
 echo %MSG_PREFIX% INFO: -m flag ignored. mfa_serial is not defined for %GREEN%%AWS_PROFILE%%RESET% profile.
 goto :eof
 
-:info_32
+:info_29
 echo %MSG_PREFIX% INFO: Successfully copied certificate to %YELLOW%!MC_CA_BUNDLE!%RESET% profile.
 goto :eof
 
-:info_33
+:info_30
 echo %MSG_PREFIX% INFO: Certificate exists %YELLOW%!MC_CA_BUNDLE!%RESET%. Ignored copying to ~\mc\certs\CAs.
 goto :eof
-
-
-
-
 
 
 
@@ -2848,7 +2667,7 @@ echo %MSG_PREFIX% ERROR ^(26^): extra character detected after closing bracket ^
 goto :eof
 
 :error_27
-echo %MSG_PREFIX% ERROR ^(27^): space detected in header's name position ^at line !line_nr! of %header_source% -^> ^{%header_chars%^}
+echo %MSG_PREFIX% ERROR ^(27^): space detected in header's name ^at line !line_nr! of %header_source% -^> ^{%header_chars%^}
 goto :eof
 
 :error_28
